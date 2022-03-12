@@ -69,19 +69,11 @@ public class ikcontrol : MonoBehaviour
                 lastDirection[i] = jointPosition[i+1] - jointPosition[i];
             }
             boneLength[i] = lastDirection[i].magnitude;
-            //Debug.Log(bone[i].rotation);
-            //Debug.Log(i);
             boneLengthMax+=boneLength[i];
         }
-        
-        //Debug.Log("before"+targetPosition);
-        //Debug.Log((targetPosition - jointPosition[0]));
-        
     }
 
     private void ProcessIK(){
-        //Debug.Log(targetPosition);
-        //Debug.Log(bone[rawJoint.Length-1].position);
         currentDistance = (targetPosition - jointPosition[rawJoint.Length-1]).magnitude;
         
         targetRotation = NormalizeRot(realTarget.rotation);
@@ -114,6 +106,7 @@ public class ikcontrol : MonoBehaviour
                     Quaternion rotation = Quaternion.FromToRotation(precedingBonePreDirection, precedingBonePostDirection);
                     jointOrientation[i] *= rotation;
                     jointOrientation[i - 1] *= rotation;
+                    
 
                     // TODO: Instead of a one-time conditional, idk do something else
                 }
@@ -166,6 +159,7 @@ public class ikcontrol : MonoBehaviour
             rawJoint[i].rotation = DenormalizeRot(jointOrientation[i]);
             //rawJoint[i].rotation = Quaternion.Euler(0f, 0f, 40f);
             rawJoint[i].position = DenormalizePos(jointPosition[i]);
+            
 
 
         }
@@ -208,7 +202,7 @@ public class ikcontrol : MonoBehaviour
         if (jointPosition.Length != 0){
             for (int i = 1; i< rawJoint.Length;i++){
                 if (jointPosition[i]!=null && jointPosition[i-1]!=null){
-                    Vector3 position = new Vector3(5f,5f,5f);
+                    Vector3 position = new Vector3(0f,0f,0f);
                     Handles.color = Color.blue;
                     Handles.DrawLine(jointPosition[i]+position,jointPosition[i-1]+position);
                     Handles.color = Color.black;
