@@ -13,6 +13,7 @@ public class Q01 : MonoBehaviour
     private Vector3 _target3Pos;
     public Transform target4Transform;
     public Quaternion quaternion;
+    
     private void Update(){
         if (quaternion == null) return;
         
@@ -27,13 +28,13 @@ public class Q01 : MonoBehaviour
             target3Transform.position = pos;
             target3Transform.rotation *= Quaternion.FromToRotation(preDirection, postDirection);
 
-
+            
 
         }
 
         if (Input.GetKeyDown(KeyCode.G))
         {
-            Debug.Log("Key G pressed");
+            
             target4Transform.rotation = Quaternion.Euler(0f, 0f, 90f);
         }
         
@@ -43,7 +44,7 @@ public class Q01 : MonoBehaviour
             target3Transform.rotation = Quaternion.Euler(0f, 0f, 90f);
         }
 
-
+    
 
     }
     private void FixedUpdate() {

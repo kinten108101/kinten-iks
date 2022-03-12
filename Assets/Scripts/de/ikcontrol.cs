@@ -130,9 +130,10 @@ public class ikcontrol : MonoBehaviour
                                        jointPosition[i + 1];
                     Vector3 precedingBonePostDirection = jointPosition[i] - jointPosition[i-1];
                     Quaternion rotation = Quaternion.FromToRotation(precedingBonePreDirection, precedingBonePostDirection);
-                    jointOrientation[i - 1] *= rotation;
+                    jointOrientation[i - 1] *=rotation;
                 }
                 //bone[i-1].rotation = Quaternion.FromToRotation(beforeDirection,jointPosition[i]-jointPosition[i-1])*bone[i-1].rotation;
+                Debug.Log(i+" - "+jointOrientation[i-1].eulerAngles);
             }
             //backward reaching
             jointPosition[0] = jointPositionRoot;
@@ -150,7 +151,7 @@ public class ikcontrol : MonoBehaviour
                     jointPosition[i] = (jointPosition[i] - jointPosition[i-1]).normalized*boneLength[i-1] + jointPosition[i-1];
                     Vector3 supercedingBonePostDirection = jointPosition[i + 1] - jointPosition[i];
                     Quaternion rotation = Quaternion.FromToRotation(supercedingBonePreDirection, supercedingBonePostDirection);
-                    jointOrientation[i + 1] *= rotation;
+                    jointOrientation[i] *= rotation;
                     
                 }
 
@@ -163,11 +164,12 @@ public class ikcontrol : MonoBehaviour
         for (int i =0; i<rawJoint.Length; i++)
         {
             rawJoint[i].rotation = DenormalizeRot(jointOrientation[i]);
+            //rawJoint[i].rotation = Quaternion.Euler(0f, 0f, 40f);
             rawJoint[i].position = DenormalizePos(jointPosition[i]);
 
 
         }
-        Debug.Log(rawJoint[2].rotation.eulerAngles);
+        //Debug.Log(rawJoint[2].rotation.eulerAngles);
     }
     private Vector3 NormalizePos(Vector3 inputPos){
         //return Quaternion.Inverse(rootRefRot)*(inputPos-rootRefPos);
@@ -235,3 +237,9 @@ public class ikcontrol : MonoBehaviour
 #endif
 }
 
+// Should be noting on Trello but too lazy, so here we go
+// 12.3.202#.18.27. After some experiment in Q01 (should have just RTFM) I found out that when you assign the rotation you are assigning the world-space one.
+// But this only verifies my current approach, so why the error? 
+// 12.3.202#.18.54. By using Debug.Log(i+" - "+jointOrientation[i-1].eulerAngles); I can verify that it's the jointOrientation that's causing the problem, not the applyIK. Even these values are inconsistent.
+// 12.3.202#.19.03. Never mind, my mistake in the back reaching. I should change jointOrientation[i], not jointOrientation[i+1].
+// Now that we've cleared that awkwardness, we managed to improve the code while safely returning the project to the state it once was, as in still having that weird quaternion applyIK issue where rotations go the other way.
