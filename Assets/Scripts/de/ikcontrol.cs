@@ -8,12 +8,12 @@ public class ikcontrol : MonoBehaviour
     private Transform rootRef;
     private Quaternion rootRefRot, rotationPlaceholder;
     private Vector3 rootRefPos;
-    [SerializeField]private Vector3[] bonePosition;
-    [SerializeField]private Quaternion[] boneRotation;
+    [SerializeField]private Vector3[] jointPosition;
+    [SerializeField]private Quaternion[] jointOrientation;
     private float[] boneLength;
-    private Vector3[] testbonePosition;
+    private Vector3[] testjointPosition;
     private float boneLengthMax;
-    [SerializeField]private Transform[] realBone;
+    [SerializeField]private Transform[] rawJoint;
     [SerializeField]private Transform realTarget;
     private Vector3 targetPosition;
     [Range(10,100)][SerializeField]private int ikloops;
@@ -36,54 +36,37 @@ public class ikcontrol : MonoBehaviour
     }
     private void initIK(){
         boneLengthMax = 0f;
-        bonePosition = new Vector3[realBone.Length];
-        boneRotation = new Quaternion[realBone.Length];
-        testbonePosition = new Vector3[realBone.Length];
-        lastRotation = new Quaternion[realBone.Length];
+        jointPosition = new Vector3[rawJoint.Length];
+        jointOrientation = new Quaternion[rawJoint.Length];
+        testjointPosition = new Vector3[rawJoint.Length];
+        lastRotation = new Quaternion[rawJoint.Length];
         //bone.SetValue(new Vector3(0f,0f,0f),0);
 
         //helpful references
-        rootRef = realBone[0];
+        rootRef = rawJoint[0];
 
         rootRefRot = rootRef.rotation;
         rotationPlaceholder = Quaternion.identity;
 
         rootRefPos = rootRef.position;
         targetPosition = NormalizePos(realTarget.position);
-        //rootspace bone
-        for (int i = 0; i< realBone.Length;i++){
-            //Vector3 placeholder = realBone[i].position;
-            bonePosition[i] = NormalizePos(realBone[i].position);
-            //bonePosition[i] = placeholder;
-            
-            //if (realBone[i].position != placeholder) throw new UnityException("realBones are interfered too early.");
-            //bonePosition[i].Set(position.x,position.y,position.z);
-            //if (bonePosition[i] == realBone[i].position && rootRefPos != Vector3.zero) throw new UnityException("WorldToRoot translation failed");
-            //Debug.Log("1/ realBone"+"["+i+"]"+" before changes is: "+bonePosition[i]);
-            lastRotation[i] = realBone[i].rotation;
-            testbonePosition[i] = bonePosition[i];
-            
-            //Debug.Log("bone at "+i+" is "+bonePosition[i]);
+        
+        for (int i = 0; i< rawJoint.Length;i++){
+            jointPosition[i] = NormalizePos(rawJoint[i].position);
+            jointOrientation[i] = NormalizeRot(rawJoint[i].rotation);
         }
         
-        //rootspace target
-        
-        
-
-        //Debug.Log("target position is "+targetPosition);
-
-        ////Debug.Log(Quaternion.Inverse(root.rotation));
-        if (bonePosition.Length != realBone.Length) throw new UnityException("Bone lengths are not aligning!");
-        boneLength = new float[realBone.Length];
-        lastDirection = new Vector3[realBone.Length];
+        if (jointPosition.Length != rawJoint.Length) throw new UnityException("Bone lengths are not aligning!");
+        boneLength = new float[rawJoint.Length];
+        lastDirection = new Vector3[rawJoint.Length];
         currentDistance = new float();
         //lengths, directions, etc
-        for (int i=0;i<realBone.Length;i++){
-            if (i==realBone.Length-1) {
-                lastDirection[i] = targetPosition - bonePosition[i];
+        for (int i=0;i<rawJoint.Length;i++){
+            if (i==rawJoint.Length-1) {
+                lastDirection[i] = targetPosition - jointPosition[i];
             }
             else {
-                lastDirection[i] = bonePosition[i+1] - bonePosition[i];
+                lastDirection[i] = jointPosition[i+1] - jointPosition[i];
             }
             boneLength[i] = lastDirection[i].magnitude;
             //Debug.Log(bone[i].rotation);
@@ -92,19 +75,19 @@ public class ikcontrol : MonoBehaviour
         }
         
         //Debug.Log("before"+targetPosition);
-        //Debug.Log((targetPosition - bonePosition[0]));
+        //Debug.Log((targetPosition - jointPosition[0]));
         
     }
 
     private void ProcessIK(){
         //Debug.Log(targetPosition);
-        //Debug.Log(bone[realBone.Length-1].position);
-        currentDistance = (targetPosition - bonePosition[realBone.Length-1]).magnitude;
+        //Debug.Log(bone[rawJoint.Length-1].position);
+        currentDistance = (targetPosition - jointPosition[rawJoint.Length-1]).magnitude;
         
-        targetRotation = WorldToRootRot(realTarget.rotation);
+        targetRotation = NormalizeRot(realTarget.rotation);
         if (currentDistance >= boneLengthMax){
-            for (int i = 1; i<realBone.Length;i++){
-                bonePosition[i] = (targetPosition - bonePosition[0]).normalized * boneLength[i-1] + bonePosition[i-1];
+            for (int i = 1; i<rawJoint.Length;i++){
+                jointPosition[i] = (targetPosition - jointPosition[0]).normalized * boneLength[i-1] + jointPosition[i-1];
             }
 
             return;
@@ -112,83 +95,96 @@ public class ikcontrol : MonoBehaviour
 
         if (dStretchOnly) return;
         
-        for (int i = 1;i< realBone.Length;i++){
-            bonePosition[i] = Vector3.Lerp(bonePosition[i],bonePosition[i-1] + lastDirection[i-1],SnapBackStrength);                    
+        for (int i = 1;i< rawJoint.Length;i++){
+            jointPosition[i] = Vector3.Lerp(jointPosition[i],jointPosition[i-1] + lastDirection[i-1],SnapBackStrength);                    
         } 
         // the original FABRIK paper used a tolerance check, aka closed loop. Here we use an open loop instead, for historical reasons.
         for (int j = 0;j<ikloops;j++){
             //forward reaching
-            for (int i = realBone.Length-1; i>0;i--){
-                //Vector3 beforeDirection = bonePosition[i]-bonePosition[i-1];
-                if (i == realBone.Length - 1){
-                    bonePosition[i] = targetPosition;
+            Vector3 jointPositionRoot = jointPosition[0];
+            for (int i = rawJoint.Length-1; i>0;i--){
+                // When a joint is moved, only its preceding joint reorientates (because a joint only moves
+                // on one axis, merely readjusting its position). The exception being the tail joint (which is
+                // at end effector so vector is zero) and root joint (which has no preceding joint).
+                if (i == rawJoint.Length - 1)
+                {
+                    Vector3 precedingBonePreDirection = jointPosition[i] - jointPosition[i - 1];
+                    jointPosition[i] = targetPosition;
+                    Vector3 precedingBonePostDirection = jointPosition[i] - jointPosition[i - 1];
+                    Quaternion rotation = Quaternion.FromToRotation(precedingBonePreDirection, precedingBonePostDirection);
+                    jointOrientation[i] *= rotation;
+                    jointOrientation[i - 1] *= rotation;
+
+                    // TODO: Instead of a one-time conditional, idk do something else
+                }
+                else if (i == 0)
+                {
+                    jointPosition[i] = (jointPosition[i] - jointPosition[i + 1]).normalized * boneLength[i] +
+                                       jointPosition[i + 1];
+                  
                 }
                 else
-                    bonePosition[i]=(bonePosition[i]-bonePosition[i+1]).normalized*boneLength[i]+bonePosition[i+1];
-                //bone[i-1].rotation = Quaternion.FromToRotation(beforeDirection,bonePosition[i]-bonePosition[i-1])*bone[i-1].rotation;
+                {
+                    Vector3 precedingBonePreDirection = jointPosition[i] - jointPosition[i-1];
+                    jointPosition[i] = (jointPosition[i] - jointPosition[i + 1]).normalized * boneLength[i] +
+                                       jointPosition[i + 1];
+                    Vector3 precedingBonePostDirection = jointPosition[i] - jointPosition[i-1];
+                    Quaternion rotation = Quaternion.FromToRotation(precedingBonePreDirection, precedingBonePostDirection);
+                    jointOrientation[i - 1] *= rotation;
+                }
+                //bone[i-1].rotation = Quaternion.FromToRotation(beforeDirection,jointPosition[i]-jointPosition[i-1])*bone[i-1].rotation;
             }
             //backward reaching
-            for (int i = 1; i< realBone.Length;i++){
-                bonePosition[i] = (bonePosition[i] - bonePosition[i-1]).normalized*boneLength[i-1] + bonePosition[i-1];
+            jointPosition[0] = jointPositionRoot;
+            for (int i = 1; i< rawJoint.Length;i++)
+            {
+                if ( i == rawJoint.Length - 1)
+                {
+                    jointPosition[i] = (jointPosition[i] - jointPosition[i - 1]).normalized * boneLength[i - 1] +
+                                       jointPosition[i - 1];
+                    
+                }
+                else
+                {
+                    Vector3 supercedingBonePreDirection = jointPosition[i + 1] - jointPosition[i];
+                    jointPosition[i] = (jointPosition[i] - jointPosition[i-1]).normalized*boneLength[i-1] + jointPosition[i-1];
+                    Vector3 supercedingBonePostDirection = jointPosition[i + 1] - jointPosition[i];
+                    Quaternion rotation = Quaternion.FromToRotation(supercedingBonePreDirection, supercedingBonePostDirection);
+                    jointOrientation[i + 1] *= rotation;
+                    
+                }
+
             }
         }
     
     
     }
     private void ApplyIK(){
-        for (int i =0; i<realBone.Length; i++){
-
-            Vector3 lastParentDirection = Vector3.zero;
-            Vector3 currentParentDirection = Vector3.zero;
-            if (i!=0){
-                lastParentDirection = lastDirection[i-1];
-                currentParentDirection = bonePosition[i]-bonePosition[i-1];
-            }
-
-            Vector3 lastSourceDirection = lastDirection[i];
-            Vector3 currentSourceDirection = Vector3.zero;
-            if (i==realBone.Length-1) currentSourceDirection = targetPosition - bonePosition[0];
-            else currentSourceDirection = bonePosition[i+1] - bonePosition[i];
-
-
-            Quaternion lastLocalRotation = Quaternion.FromToRotation(lastParentDirection,lastDirection[i]);
-            if (i==0) lastLocalRotation = Quaternion.identity;
-            Quaternion delta = Quaternion.FromToRotation(lastParentDirection,currentParentDirection);
-
-            Vector3 lastVector = delta * lastDirection[i];
-            Vector3 vector = currentSourceDirection;
-            Quaternion rotation = Quaternion.FromToRotation(lastVector,vector);
-
-            rotationPlaceholder = rotationPlaceholder*lastLocalRotation*rotation;
-            
-            realBone[i].rotation = RootToWorldRot(rotationPlaceholder);
-            realBone[i].position = RootToWorldPos(bonePosition[i]);
+        for (int i =0; i<rawJoint.Length; i++)
+        {
+            rawJoint[i].rotation = DenormalizeRot(jointOrientation[i]);
+            rawJoint[i].position = DenormalizePos(jointPosition[i]);
 
 
         }
+        Debug.Log(rawJoint[2].rotation.eulerAngles);
     }
-    //I mean, this is copypasta. 
-    private Vector3 NormalizePos(Vector3 _inputPos){
-        //Quaternion.Inverse(root.rotation) = 
-        //Debug.Log(root.position);
-            
-            //Debug.Log(root.position);
-            //Debug.Log(Quaternion.Inverse(root.rotation)*(worldpos.position-root.position));
-        return Quaternion.Inverse(rootRefRot)*(_inputPos-rootRefPos);
+    private Vector3 NormalizePos(Vector3 inputPos){
+        //return Quaternion.Inverse(rootRefRot)*(inputPos-rootRefPos);
+        return inputPos;
+    }
+    private Vector3 DenormalizePos(Vector3 inputPos){
+        //return rootRefRot*inputPos + rootRefPos;
+        return inputPos;
+    }
+    private Quaternion NormalizeRot(Quaternion inputRot){
         
-        //if (result != rotation) throw new UnityException("void does not pass on value");
+        //return inputRot*Quaternion.Inverse(rootRefRot);
+        return inputRot;
     }
-    private Vector3 RootToWorldPos(Vector3 rootpos){
-        return rootRefRot*rootpos + rootRefPos;
-    }
-    private Quaternion WorldToRootRot(Quaternion worldrot){
-        //return rootRefRot*Quaternion.Inverse(worldrot);
-        return Quaternion.Inverse(rootRefRot)*worldrot;
-    }
-    private Quaternion RootToWorldRot(Quaternion rootrot){
-        return rootRefRot*rootrot;
-        //Debug.Log("result in void is: "+result);
-//        if (result != rotation) throw new UnityException("void does not pass on value");
+    private Quaternion DenormalizeRot(Quaternion inputRot){
+        //return inputRot*rootRefRot;
+        return inputRot;
     }
 
     // Update is called once per frame
@@ -198,7 +194,7 @@ public class ikcontrol : MonoBehaviour
     }
     void Update()
     {
-        //root = realBone[0];
+        //root = rawJoint[0];
         
         initIK();
         ProcessIK();
@@ -207,23 +203,23 @@ public class ikcontrol : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos(){
 
-        if (bonePosition.Length != 0){
-            for (int i = 1; i< realBone.Length;i++){
-                if (bonePosition[i]!=null && bonePosition[i-1]!=null){
+        if (jointPosition.Length != 0){
+            for (int i = 1; i< rawJoint.Length;i++){
+                if (jointPosition[i]!=null && jointPosition[i-1]!=null){
                     Vector3 position = new Vector3(5f,5f,5f);
                     Handles.color = Color.blue;
-                    Handles.DrawLine(bonePosition[i]+position,bonePosition[i-1]+position);
+                    Handles.DrawLine(jointPosition[i]+position,jointPosition[i-1]+position);
                     Handles.color = Color.black;
-                    Handles.DrawLine(testbonePosition[i]+position,testbonePosition[i-1]+position);
+                    Handles.DrawLine(testjointPosition[i]+position,testjointPosition[i-1]+position);
                 }
             }
         }
 
         Handles.color = Color.red;
-        if (realBone != null){
-            for (int i = 1; i< realBone.Length;i++){
-                if (realBone[i]!=null && realBone[i-1]!=null){
-                Handles.DrawLine(realBone[i].position,realBone[i-1].position);
+        if (rawJoint != null){
+            for (int i = 1; i< rawJoint.Length;i++){
+                if (rawJoint[i]!=null && rawJoint[i-1]!=null){
+                Handles.DrawLine(rawJoint[i].position,rawJoint[i-1].position);
                 }
             }
         }

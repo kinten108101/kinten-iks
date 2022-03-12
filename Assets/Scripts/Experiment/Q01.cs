@@ -11,16 +11,40 @@ public class Q01 : MonoBehaviour
     private Vector3 _target2Pos;
     public Transform target3Transform;
     private Vector3 _target3Pos;
+    public Transform target4Transform;
     public Quaternion quaternion;
     private void Update(){
         if (quaternion == null) return;
         
-            target3Transform.position = quaternion*target3Transform.position;
+        if (Input.GetKeyDown(KeyCode.J))
+        {
+            Debug.Log("Key J pressed");
             
-            Debug.Log("Key pressed");    
+            Vector3 pos = target3Transform.position;
+            Vector3 preDirection = pos - rootTransform.position; 
+            pos = rootTransform.position + quaternion * (target3Transform.position - rootTransform.position);
+            Vector3 postDirection = pos - rootTransform.position;
+            target3Transform.position = pos;
+            target3Transform.rotation *= Quaternion.FromToRotation(preDirection, postDirection);
+
+
+
+        }
+
+        if (Input.GetKeyDown(KeyCode.G))
+        {
+            Debug.Log("Key G pressed");
+            target4Transform.rotation = Quaternion.Euler(0f, 0f, 90f);
+        }
         
-        
-        
+        if (Input.GetKeyDown(KeyCode.H))
+        {
+            Debug.Log("Key H pressed");
+            target3Transform.rotation = Quaternion.Euler(0f, 0f, 90f);
+        }
+
+
+
     }
     private void FixedUpdate() {
         _rootPos = rootTransform.position;
