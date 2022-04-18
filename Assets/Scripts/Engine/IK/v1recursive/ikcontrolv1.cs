@@ -1,26 +1,28 @@
-using UnityEngine;
 using UnityEditor;
+using UnityEngine;
 
-public class ikcontrol : MonoBehaviour
+namespace Engine.IK.v1recursive
 {
-    private int n;
-    //bone gameobjects could be scanned for, but for now we'll add them manually.
+    public class ikcontrolv1 : MonoBehaviour
+    {
+    
+    // TODO: Articulated model detection, no need for drag and drop objects into fields.
     private Transform rootRef;
     private Quaternion rootRefRot, rotationPlaceholder;
     private Vector3 rootRefPos;
     [SerializeField]private Vector3[] jointPosition;
     [SerializeField]private Quaternion[] jointOrientation;
     private float[] boneLength;
-    private Vector3[] testjointPosition;
-    private float boneLengthMax;
-    [SerializeField]private Transform[] rawJoint;
-    [SerializeField]private Transform realTarget;
+    private float stretchLength;
+    [SerializeField]private Transform[] worldJoint;
+    [SerializeField]private Transform worldTarget;
     private Vector3 targetPosition;
     [Range(10,100)][SerializeField]private int ikloops;
     [Range(0f,1f)][SerializeField]private float SnapBackStrength;
     [Header("DEBUGGING ONLY")]
     [Range(0f,360f)]public float a,b,c;
-    [SerializeField] private bool dStretchOnly = false;
+    [SerializeField] private bool bStretchOnly = false;
+    
     private Vector3[] lastDirection;
     
     private Quaternion[] lastRotation;
@@ -35,70 +37,71 @@ public class ikcontrol : MonoBehaviour
         
     }
     private void initIK(){
-        boneLengthMax = 0f;
-        jointPosition = new Vector3[rawJoint.Length];
-        jointOrientation = new Quaternion[rawJoint.Length];
-        testjointPosition = new Vector3[rawJoint.Length];
-        lastRotation = new Quaternion[rawJoint.Length];
+        stretchLength = 0f;
+        jointPosition = new Vector3[worldJoint.Length];
+        jointOrientation = new Quaternion[worldJoint.Length];
+        
+        lastRotation = new Quaternion[worldJoint.Length];
         //bone.SetValue(new Vector3(0f,0f,0f),0);
 
         //helpful references
-        rootRef = rawJoint[0];
+        rootRef = worldJoint[0];
 
         rootRefRot = rootRef.rotation;
         rotationPlaceholder = Quaternion.identity;
 
         rootRefPos = rootRef.position;
-        targetPosition = NormalizePos(realTarget.position);
+        targetPosition = NormalizePos(worldTarget.position);
         
-        for (int i = 0; i< rawJoint.Length;i++){
-            jointPosition[i] = NormalizePos(rawJoint[i].position);
-            jointOrientation[i] = NormalizeRot(rawJoint[i].rotation);
+        for (int i = 0; i< worldJoint.Length;i++){
+            jointPosition[i] = NormalizePos(worldJoint[i].position);
+            jointOrientation[i] = NormalizeRot(worldJoint[i].rotation);
         }
         
-        if (jointPosition.Length != rawJoint.Length) throw new UnityException("Bone lengths are not aligning!");
-        boneLength = new float[rawJoint.Length];
-        lastDirection = new Vector3[rawJoint.Length];
+        if (jointPosition.Length != worldJoint.Length) throw new UnityException("Bone lengths are not aligning!");
+        boneLength = new float[worldJoint.Length];
+        lastDirection = new Vector3[worldJoint.Length];
         currentDistance = new float();
         //lengths, directions, etc
-        for (int i=0;i<rawJoint.Length;i++){
-            if (i==rawJoint.Length-1) {
+        for (int i=0;i<worldJoint.Length;i++){
+            if (i==worldJoint.Length-1) {
                 lastDirection[i] = targetPosition - jointPosition[i];
             }
             else {
                 lastDirection[i] = jointPosition[i+1] - jointPosition[i];
             }
             boneLength[i] = lastDirection[i].magnitude;
-            boneLengthMax+=boneLength[i];
+            stretchLength+=boneLength[i];
         }
     }
 
     private void ProcessIK(){
-        currentDistance = (targetPosition - jointPosition[rawJoint.Length-1]).magnitude;
+        currentDistance = (targetPosition - jointPosition[worldJoint.Length-1]).magnitude;
         
-        targetRotation = NormalizeRot(realTarget.rotation);
-        if (currentDistance >= boneLengthMax){
-            for (int i = 1; i<rawJoint.Length;i++){
+        targetRotation = NormalizeRot(worldTarget.rotation);
+        if (currentDistance >= stretchLength){
+            for (int i = 1; i<worldJoint.Length;i++){
                 jointPosition[i] = (targetPosition - jointPosition[0]).normalized * boneLength[i-1] + jointPosition[i-1];
             }
 
             return;
         }
 
-        if (dStretchOnly) return;
+        if (bStretchOnly) return;
         
-        for (int i = 1;i< rawJoint.Length;i++){
+        for (int i = 1;i< worldJoint.Length;i++){
             jointPosition[i] = Vector3.Lerp(jointPosition[i],jointPosition[i-1] + lastDirection[i-1],SnapBackStrength);                    
         } 
         // the original FABRIK paper used a tolerance check, aka closed loop. Here we use an open loop instead, for historical reasons.
+        // also this version's root isn't necessarily fixed, so that can cause an infinite loop.
         for (int j = 0;j<ikloops;j++){
             //forward reaching
             Vector3 jointPositionRoot = jointPosition[0];
-            for (int i = rawJoint.Length-1; i>0;i--){
+            for (int i = worldJoint.Length-1; i>0;i--){
                 // When a joint is moved, only its preceding joint reorientates (because a joint only moves
                 // on one axis, merely readjusting its position). The exception being the tail joint (which is
                 // at end effector so vector is zero) and root joint (which has no preceding joint).
-                if (i == rawJoint.Length - 1)
+                if (i == worldJoint.Length - 1)
                 {
                     Vector3 precedingBonePreDirection = jointPosition[i] - jointPosition[i - 1];
                     jointPosition[i] = targetPosition;
@@ -130,9 +133,9 @@ public class ikcontrol : MonoBehaviour
             }
             //backward reaching
             jointPosition[0] = jointPositionRoot;
-            for (int i = 1; i< rawJoint.Length;i++)
+            for (int i = 1; i< worldJoint.Length;i++)
             {
-                if ( i == rawJoint.Length - 1)
+                if ( i == worldJoint.Length - 1)
                 {
                     jointPosition[i] = (jointPosition[i] - jointPosition[i - 1]).normalized * boneLength[i - 1] +
                                        jointPosition[i - 1];
@@ -153,17 +156,41 @@ public class ikcontrol : MonoBehaviour
     
     
     }
-    private void ApplyIK(){
-        for (int i =0; i<rawJoint.Length; i++)
+    private void ApplyIKQuaternion(){
+        for (int i =0; i<worldJoint.Length; i++)
         {
-            rawJoint[i].rotation = DenormalizeRot(jointOrientation[i]);
-            //rawJoint[i].rotation = Quaternion.Euler(0f, 0f, 40f);
-            rawJoint[i].position = DenormalizePos(jointPosition[i]);
+            worldJoint[i].rotation = DenormalizeRot(jointOrientation[i]);
+            //worldJoint[i].rotation = Quaternion.Euler(0f, 0f, 40f);
+            worldJoint[i].position = DenormalizePos(jointPosition[i]);
             
 
 
         }
-        //Debug.Log(rawJoint[2].rotation.eulerAngles);
+        //Debug.Log(worldJoint[2].rotation.eulerAngles);
+    }
+
+    private void ApplyIKVector()
+    {
+        worldJoint[0].position = DenormalizePos(jointPosition[0]);
+        
+        
+        for (int i = 1; i < worldJoint.Length; i++)
+        {
+        
+            worldJoint[i].position = DenormalizePos(jointPosition[i]);
+            worldJoint[i-1].up = jointPosition[i] - jointPosition[i-1];
+            
+            
+        }
+
+        
+        for (int i = worldJoint.Length - 2; i >= 0; i--)
+        {
+            
+        }
+
+        worldJoint[worldJoint.Length - 1].up = worldJoint[worldJoint.Length - 2].up;
+
     }
     private Vector3 NormalizePos(Vector3 inputPos){
         //return Quaternion.Inverse(rootRefRot)*(inputPos-rootRefPos);
@@ -190,39 +217,34 @@ public class ikcontrol : MonoBehaviour
     }
     void Update()
     {
-        //root = rawJoint[0];
+        //root = worldJoint[0];
         
         initIK();
         ProcessIK();
-        ApplyIK();
+        ApplyIKQuaternion();
     }
 #if UNITY_EDITOR
-    void OnDrawGizmos(){
+        private void OnDrawGizmos()
+        {
 
         if (jointPosition.Length != 0){
-            for (int i = 1; i< rawJoint.Length;i++){
+            for (int i = 1; i< worldJoint.Length;i++){
                 if (jointPosition[i]!=null && jointPosition[i-1]!=null){
-                    Vector3 position = new Vector3(0f,0f,0f);
+                    Vector3 position = new Vector3(2f,2f,2f);
                     Handles.color = Color.blue;
                     Handles.DrawLine(jointPosition[i]+position,jointPosition[i-1]+position);
-                    Handles.color = Color.black;
-                    Handles.DrawLine(testjointPosition[i]+position,testjointPosition[i-1]+position);
                 }
             }
         }
 
         Handles.color = Color.red;
-        if (rawJoint != null){
-            for (int i = 1; i< rawJoint.Length;i++){
-                if (rawJoint[i]!=null && rawJoint[i-1]!=null){
-                Handles.DrawLine(rawJoint[i].position,rawJoint[i-1].position);
+        if (worldJoint != null){
+            for (int i = 1; i< worldJoint.Length;i++){
+                if (worldJoint[i]!=null && worldJoint[i-1]!=null){
+                Handles.DrawLine(worldJoint[i].position,worldJoint[i-1].position);
                 }
             }
         }
-        //Handles.color = Color.cyan;
-        //if (direction != null) Handles.DrawLine(Vector3.zero, direction);
-        //Handles.color = Color.blue;
-//        if (lastDirection[1] != null )Handles.DrawLine(Vector3.zero, lastDirection[1]);
         Handles.color = Color.red;
         Vector3 positiona = new Vector3(5f,5f,5f);
         Handles.DrawWireCube(targetPosition+positiona, new Vector3(2f,2f,2f));
@@ -237,3 +259,4 @@ public class ikcontrol : MonoBehaviour
 // 12.3.202#.18.54. By using Debug.Log(i+" - "+jointOrientation[i-1].eulerAngles); I can verify that it's the jointOrientation that's causing the problem, not the applyIK. Even these values are inconsistent.
 // 12.3.202#.19.03. Never mind, my mistake in the back reaching. I should change jointOrientation[i], not jointOrientation[i+1].
 // Now that we've cleared that awkwardness, we managed to improve the code while safely returning the project to the state it once was, as in still having that weird quaternion applyIK issue where rotations go the other way.
+}

@@ -53,7 +53,7 @@ public class Q01 : MonoBehaviour
         _target2Pos = target2Transform.position;
         _target3Pos = target3Transform.position;
         quaternion = Quaternion.FromToRotation(_target1Pos-_rootPos, _target2Pos-_rootPos);
-        //TODO:Check this
+        //TODO:Check this. So are we rotating around the up vector or something?
     }
     
     private void OnDrawGizmos() {
