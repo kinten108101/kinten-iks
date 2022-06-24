@@ -1,6 +1,5 @@
 using System;
 using System.Security.Cryptography.X509Certificates;
-using TMPro;
 using UnityEditor.PackageManager;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -58,19 +57,6 @@ namespace Engine
             // I need to create a stopping force. Conventional F=kx doesn't help. Need a formula that keeps it balanced.
             // After some digging I (re)discovered PID controllers. This is the type of problem I've been looking for. 
 
-        }
-
-        void travel()
-        {
-            var delta = destination.x - transform.position.x;
-            distanceXTravel = delta>0?Mathf.Min(delta, forceMultiplier3):Mathf.Max(delta,-forceMultiplier3);
-            Vector3 forceVectorXTravel = new Vector3(1f, 0f, 0f) * distanceXTravel;
-            _rigidbody.AddForceAtPosition(forceVectorXTravel,transform.position + new Vector3(-2f,0f,0f),ForceMode.Force);
-            
-            delta = destination.z - transform.position.z;
-            distanceZTravel = delta>0?Mathf.Min(delta, forceMultiplier3):Mathf.Max(delta,-forceMultiplier3);
-            Vector3 forceVectorZTravel = new Vector3(0f, 0f, 1f) * distanceZTravel;
-            _rigidbody.AddForceAtPosition(forceVectorZTravel,transform.position + new Vector3(0f,0f,-2f),ForceMode.Force);
         }
     }
 }
